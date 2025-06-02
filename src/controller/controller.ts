@@ -1,148 +1,151 @@
-import { TaskFilter } from "../dto/filter-task.dto";
 import { TasksDTO } from "../dto/task.dto";
-import { database } from "../models/database";
+import { TaskQuery } from "../dto/query-task.dto";
+import { TaskUpdateData } from "../dto/update-task.dto";
+import { Database } from "../models/database";
+import { Request, Response } from 'express'
+import { randomUUID } from 'node:crypto'
 
-export class TaskManager {
-    private database = new database();
+const database = new Database();
 
-    async createTasks(name: string, description: string): Promise<TasksDTO> {
 
-        //checar se os valores inseridos são válidos
-        if (!name || typeof name !== "string" || name.trim() === "") {
-            throw new Error('Name e/ou description são obrigatórios.');
-        }
-        if (!description || typeof description !== "string" || description.trim() === "") {
-            throw new Error('Name e/ou  description são obrigatórios.');
-        }
+//Criar
+export const createTask = (req: Request<{}, any, Omit<TasksDTO, 'id' | 'completed' | 'createdAt' | 'updatedAt'>>, res: Response) => {
+    const { name, description } = req.body
 
-        //criação da tarefa
-        return this.database.insert({
-            "tasks",
-            data: { name, description }
-        });
+    if (typeof name !== 'string' || typeof description !== 'string') {
+        return res.status(400).send('Valores inválidos')
+    }
+    if (name.trim() === '' || description.trim() === '') {
+        return res.status(400).send('Os valores estão em branco, por favor, digite eles.')
     }
 
-    async searchTasks(filter: TaskFilter): Promise<TaskFilter[]> {
-        const { id, name, description } = filter;
-        //checa se o filtro, e somente um, foi utilizado
-        const filtersUsed = [id, name, description].filter(v => v !== undefined);
-
-        if (filtersUsed.length > 1) {
-            throw new Error("Utilize um, e somente um, filtro para pesquisar. Opções: id, name, description.");
-        }
-
-        if (filtersUsed.length <= 0) {
-            return this.prisma.task.findMany();
-        }
-
-        // Busca por ID
-        if (id !== undefined) {
-            const task = await this.prisma.task.findUnique({ where: { id } });
-            return task ? [task] : [];
-        }
-
-        // Busca por nome
-        if (name !== undefined) {
-            return this.prisma.task.findMany({
-                where: {
-                    name: {
-                        contains: name as string
-                    },
-                },
-            });
-        }
-
-        if (description !== undefined) {
-            return this.prisma.task.findMany({
-                where: {
-                    description: {
-                        contains: description as string
-                    },
-                },
-            });
-        }
-
-        return [];
+    const newTask: TasksDTO = {
+        id: randomUUID(),
+        name: name.trim(),
+        description: description.trim(),
+        completed: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
     }
 
-    async updateTasks(id: string, updates: Partial<{ name: string; description: string; completed: boolean }>): Promise<TasksDTO> {
-        //checar se id foi inserido
-        if (!id || typeof id !== "string" || id.trim() === "") {
-            throw new Error('Por favor, insira o valor do ID.');
-        }
-
-        //checar se a tarefa existe
-        const exists = await this.prisma.task.findUnique({ where: { id } });
-        if (!exists) {
-            throw new Error('Tarefa não encontrada.');
-        }
-
-        //montar corpo para atualizar
-        const data: Partial<{
-            name: string;
-            description: string;
-            completed: boolean;
-        }> = {};
-
-        //checar name
-        if (updates.name !== undefined) {
-            if (typeof updates.name === "string") {
-                data.name = updates.name;
-            } else {
-                throw new Error("O campo 'name' deve ser uma string.");
-            }
-        }
-
-        //checar description
-        if (updates.description !== undefined) {
-            if (typeof updates.description === "string") {
-                data.description = updates.description;
-            } else {
-                throw new Error("O campo 'description' deve ser uma string.");
-            }
-        }
-
-        //checar isClosed
-        if (updates.completed !== undefined) {
-            if (typeof updates.completed === "boolean") {
-                data.completed = updates.completed;
-            } else {
-                throw new Error("O campo 'isClosed' deve ser booleano.");
-            }
-        }
-
-        //checar se alguma informação foi inserida para atualização
-        if (Object.keys(data).length === 0) {
-            throw new Error("Nenhum campo válido para atualizar.");
-        }
-
-        //atualizar com as informações inseridas no corpo de atualização
-        const updatedTask = await this.prisma.task.update({
-            where: { id },
-            data,
-        });
-
-        return updatedTask;
-    }
-
-    async deleteTasks(id: string): Promise<boolean> {
-        //checar se o id inserido é valido ou se foi inserido
-        if (!id || typeof id !== "string" || id.trim() === "") {
-            throw new Error('Por favor, insira o valor do ID.');
-        }
-
-        //procura pela tarefa no banco
-        const exists = await this.prisma.task.findUnique({ where: { id } });
-
-        //retorno caso não encontre
-        if (!exists) {
-            throw new Error('A tarefa não foi encontrada.');
-        }
-
-        //retorno caso encontre, deletando a tarefa
-        await this.prisma.task.delete({ where: { id } });
-        return true;
-    }
+    database.insert('tasks', newTask)
+    return res.status(201).json(newTask)
 }
 
-export const taskManager = new TaskManager();
+//Pesquisar
+export const searchTask = (req: Request<{}, any, any, TaskQuery>, res: Response) => {
+    const { id, name, description } = req.query
+
+    //Checar número de filtros
+    const filledParams = [id, name, description].filter((v) => v !== undefined)
+    if (filledParams.length > 1) {
+        return res
+            .status(400)
+            .send('Para pesquisas com filtros, utilize um (e apenas um) filtro de pesquisa!')
+    }
+
+    //Função auxiliar para pesquisa
+    const doFilter = (filterKey: 'id' | 'name' | 'content', value: string) => {
+        const tasks = database.select('tasks', { [filterKey]: value })
+        if (tasks.length === 0) {
+            return res.status(404).send('Nada foi encontrado')
+        }
+        return res.json(tasks)
+    }
+
+    if (id) {
+        return doFilter('id', id)
+    }
+
+    if (name) {
+        return doFilter('name', name)
+    }
+
+    if (description) {
+        return doFilter('content', description)
+    }
+
+    // Sem filtros: retorna todas as tarefas
+    const allTasks = database.select('tasks', {})
+    if (allTasks.length === 0) {
+        return res.status(404).send('Nada foi encontrado')
+    }
+    return res.json(allTasks)
+}
+
+//Editar
+export const updateTask = (req: Request<{}, any, TaskUpdateData, { id?: string }>, res: Response) => {
+        const { id } = req.query
+        const { name, description, completed } = req.body
+
+        if (!id) {
+            return res
+                .status(400)
+                .send('Por favor, insira o id da tarefa a ser editada nos parâmetros!')
+        }
+
+        const tasks = database.select('tasks', { id })
+        if (tasks.length === 0) {
+            return res
+                .status(404)
+                .send('A tarefa a ser editada na tabela não existe')
+        }
+
+        //Checar se os campos são vazios
+        if (
+            name === undefined &&
+            description === undefined &&
+            completed === undefined
+        ) {
+            return res.status(400).send('Não insira valores vazios')
+        }
+
+        //Checagem de tipo
+        if (description !== undefined && typeof description !== 'string') {
+            return res.status(400).send('Valores inválidos para content')
+        }
+        if (name !== undefined && typeof name !== 'string') {
+            return res.status(400).send('Valores inválidos para name')
+        }
+        if (completed !== undefined && typeof completed !== 'boolean') {
+            return res.status(400).send('Valores inválidos para isClosed')
+        }
+
+        //Criação do objeto para atualização
+        const updatePayload: Partial<TasksDTO> = {
+            updatedAt: new Date(),
+        }
+        if (completed !== undefined) {
+            updatePayload.completed = completed
+        }
+        if (name !== undefined && name.trim() !== '') {
+            updatePayload.name = name.trim()
+        }
+        if (description !== undefined && description.trim() !== '') {
+            updatePayload.description = description.trim()
+        }
+
+        const updated = database.update('tasks', id, updatePayload)
+        return res.json(updated)
+    }
+
+//Deletar
+export const deleteTask = (req: Request<{}, any, any, { id?: string }>, res: Response) => {
+        const { id } = req.query
+
+        if (!id) {
+            return res
+                .status(400)
+                .send('Por favor, insira o id da tarefa a ser deletada nos parâmetros!')
+        }
+
+        const tasks = database.select('tasks', { id })
+        if (tasks.length === 0) {
+            return res
+                .status(404)
+                .send('A Tarefa a ser deletada na tabela não existe')
+        }
+
+        database.delete('tasks', id)
+        return res.send(`Tarefa deletada: ${id}`)
+    }

@@ -1,5 +1,5 @@
 export interface TaskFilter {
-  id?: string | null;
-  name?: string | null;
+  id?: string;
+  name?: string;
   description?: string | null;
 }

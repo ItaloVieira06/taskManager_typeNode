@@ -15,7 +15,7 @@ type DatabaseContent = {
 const databasePath = new URL('./db.json', import.meta.url)
 
 //banco de dados na mão
-export class database {
+export class Database {
     #database: DatabaseContent = {}
 
     //criar database

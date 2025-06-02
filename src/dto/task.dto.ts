@@ -1,7 +1,7 @@
 export interface TasksDTO {
     id: string;
     name: string;
-    description: string | null;
+    description: string;
     completed: boolean;
     createdAt: Date;
     updatedAt: Date;
