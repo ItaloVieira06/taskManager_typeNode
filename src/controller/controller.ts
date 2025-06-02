@@ -3,15 +3,15 @@ import { TaskQuery } from "../dto/query-task.dto";
 import { TaskUpdateData } from "../dto/update-task.dto";
 import { Database } from "../models/database";
 import { Request, Response } from 'express'
-import { randomUUID } from 'node:crypto'
 
 const database = new Database();
 
 
 //Criar
-export const createTask = (req: Request<{}, any, Omit<TasksDTO, 'id' | 'completed' | 'createdAt' | 'updatedAt'>>, res: Response) => {
+export const createTask = (req: Request<{}, any, TasksDTO>, res: Response) => {
     const { name, description } = req.body
 
+    //Checar valores a serem inseridos
     if (typeof name !== 'string' || typeof description !== 'string') {
         return res.status(400).send('Valores inválidos')
     }
@@ -20,15 +20,15 @@ export const createTask = (req: Request<{}, any, Omit<TasksDTO, 'id' | 'complete
     }
 
     const newTask: TasksDTO = {
-        id: randomUUID(),
-        name: name.trim(),
-        description: description.trim(),
+        id: crypto.randomUUID(),
+        name,
+        description,
         completed: false,
         createdAt: new Date(),
         updatedAt: new Date(),
     }
 
-    database.insert('tasks', newTask)
+    //database.insert('tasks', newTask)
     return res.status(201).json(newTask)
 }
 
@@ -53,6 +53,7 @@ export const searchTask = (req: Request<{}, any, any, TaskQuery>, res: Response)
         return res.json(tasks)
     }
 
+    //checagem para inserção
     if (id) {
         return doFilter('id', id)
     }
@@ -65,7 +66,7 @@ export const searchTask = (req: Request<{}, any, any, TaskQuery>, res: Response)
         return doFilter('content', description)
     }
 
-    // Sem filtros: retorna todas as tarefas
+    //sem filtros ele retorna todas as tarefas
     const allTasks = database.select('tasks', {})
     if (allTasks.length === 0) {
         return res.status(404).send('Nada foi encontrado')
@@ -133,12 +134,14 @@ export const updateTask = (req: Request<{}, any, TaskUpdateData, { id?: string }
 export const deleteTask = (req: Request<{}, any, any, { id?: string }>, res: Response) => {
         const { id } = req.query
 
+        //checar se o id é valido
         if (!id) {
             return res
                 .status(400)
                 .send('Por favor, insira o id da tarefa a ser deletada nos parâmetros!')
         }
 
+        //checar se a tarefa existe
         const tasks = database.select('tasks', { id })
         if (tasks.length === 0) {
             return res
@@ -146,6 +149,7 @@ export const deleteTask = (req: Request<{}, any, any, { id?: string }>, res: Res
                 .send('A Tarefa a ser deletada na tabela não existe')
         }
 
+        //deletar
         database.delete('tasks', id)
         return res.send(`Tarefa deletada: ${id}`)
     }

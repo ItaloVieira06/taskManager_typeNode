@@ -1,10 +1,11 @@
 import { Router } from "express";
+import {createTask, searchTask, updateTask, deleteTask} from "../controller/controller"
 
 const router = Router();
 
-router.get("/",);
-router.post("/",);
-router.put("/:id",);
-router.delete("/:id",);
+router.post("/", createTask);
+router.get("/", searchTask);
+router.put("/:id", updateTask);
+router.delete("/:id", deleteTask);
 
 export default router;
